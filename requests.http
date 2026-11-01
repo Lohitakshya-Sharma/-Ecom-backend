@@ -1,0 +1,85 @@
+POST http://localhost:8080/products
+
+###
+GET http://localhost:8080/products
+
+###
+GET http://localhost:8080/products/2
+
+###
+GET http://localhost:8080/products/999
+
+###
+PUT http://localhost:8080/products/2
+Content-Type: application/json
+
+{
+  "name": "MacBook Air",
+  "description": "Apple laptop",
+  "price": 200000,
+  "active": true
+}
+
+###
+PUT http://localhost:8080/products/1
+Content-Type: application/json
+
+{
+  "name": "iPhone 17 Pro",
+  "description": "Apple premium smartphone",
+  "price": 99999,
+  "active": true
+}
+
+###
+PUT http://localhost:8080/products/999
+Content-Type: application/json
+
+{
+  "name": "",
+  "description": "",
+  "price": 0,
+  "active": true
+}
+
+###
+PUT http://localhost:8080/products/1
+Content-Type: application/json
+
+{
+  "name": "Test Product",
+  "description": "Testing missing product",
+  "price": 100,
+  "active": true
+}
+
+###
+DELETE http://localhost:8080/products/2
+
+###
+POST http://localhost:8080/products
+Content-Type: application/json
+
+{
+  "name": "iPhone 17",
+  "description": "Apple smartphone",
+  "price": 79999,
+  "active": true,
+  "stock": 10
+}
+
+### Purchase product
+POST http://localhost:8080/products/4/purchase
+Content-Type: application/json
+
+{
+  "quantity": 3
+}
+
+###
+POST http://localhost:8080/products/4/purchase
+Content-Type: application/json
+
+{
+  "quantity": 10
+}
