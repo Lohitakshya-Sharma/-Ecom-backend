@@ -56,24 +56,29 @@ class OrderIntegrationTest {
 
         Product savedProduct = productRepository.save(product);
 
-        // Arrange: Build order request
-        OrderItemRequestDTO itemRequest = new OrderItemRequestDTO();
-        itemRequest.setProductId(savedProduct.getId());
-        itemRequest.setQuantity(2);
+        // Arrange: Build order request using Record canonical constructor
+        OrderItemRequestDTO itemRequest = new OrderItemRequestDTO(savedProduct.getId(), 2);
 
-        CreateOrderRequestDTO request = new CreateOrderRequestDTO();
-        request.setItems(List.of(itemRequest));
+        CreateOrderRequestDTO request = new CreateOrderRequestDTO(
+                "customer@example.com",
+                "John Doe",
+                "123 Main St, New York, NY",
+                List.of(itemRequest)
+        );
 
         // Act: Create the order through the real service
         OrderResponseDTO response = orderService.createOrder(request);
 
         // Assert: Verify order response
-        assertNotNull(response.getId());
-        assertEquals(OrderStatus.PENDING, response.getStatus());
-        assertEquals(new BigDecimal("200.00"), response.getTotalAmount());
+        assertNotNull(response.id());
+        assertEquals("customer@example.com", response.customerEmail());
+        assertEquals("John Doe", response.customerName());
+        assertEquals("123 Main St, New York, NY", response.shippingAddress());
+        assertEquals(OrderStatus.PENDING, response.status());
+        assertEquals(new BigDecimal("200.00"), response.totalAmount());
 
-        assertEquals(1, response.getOrderItems().size());
-        assertEquals(2, response.getOrderItems().get(0).getQuantity());
+        assertEquals(1, response.orderItems().size());
+        assertEquals(2, response.orderItems().get(0).quantity());
 
         // Assert: Verify inventory deduction
         Inventory updatedInventory = inventoryRepository
@@ -83,6 +88,6 @@ class OrderIntegrationTest {
         assertEquals(8, updatedInventory.getStock());
 
         // Assert: Verify order persistence
-        assertTrue(orderRepository.existsById(response.getId()));
+        assertTrue(orderRepository.existsById(response.id()));
     }
 }

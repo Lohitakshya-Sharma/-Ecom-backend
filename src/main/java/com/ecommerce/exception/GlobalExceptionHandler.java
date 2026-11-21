@@ -1,12 +1,15 @@
 package com.ecommerce.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.net.URI;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -14,71 +17,101 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ProductNotFoundException.class)
-    public ResponseEntity<String> handleProductNotFound(
-            ProductNotFoundException ex) {
-
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(ex.getMessage());
+    public ProblemDetail handleProductNotFound(ProductNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Product Not Found");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
     }
 
     @ExceptionHandler(OrderNotFoundException.class)
-    public ResponseEntity<String> handleOrderNotFound(
-            OrderNotFoundException ex) {
-
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(ex.getMessage());
+    public ProblemDetail handleOrderNotFound(OrderNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Order Not Found");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleValidationErrors(
-            MethodArgumentNotValidException ex) {
+    public ProblemDetail handleValidationErrors(MethodArgumentNotValidException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                "Request validation failed"
+        );
+        problem.setTitle("Bad Request");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
 
         Map<String, String> errors = new HashMap<>();
-
-        ex.getBindingResult().getFieldErrors().forEach(error ->
+         ex.getBindingResult().getFieldErrors().forEach(error ->
                 errors.put(error.getField(), error.getDefaultMessage())
         );
-
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(errors);
+        problem.setProperty("errors", errors);
+        return problem;
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    public ResponseEntity<String> handleOptimisticLockingConflict(
-            ObjectOptimisticLockingFailureException ex) {
-
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body("Inventory was updated by another request. Please try again.");
+    public ProblemDetail handleOptimisticLockingConflict(ObjectOptimisticLockingFailureException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "Inventory was updated by another concurrent request. Please try again."
+        );
+        problem.setTitle("Concurrency Conflict");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
     }
 
     @ExceptionHandler(InsufficientStockException.class)
-    public ResponseEntity<String> handleInsufficientStock(
-            InsufficientStockException ex) {
-
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(ex.getMessage());
+    public ProblemDetail handleInsufficientStock(InsufficientStockException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Insufficient Stock");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
     }
 
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<String> handleIllegalState(
-            IllegalStateException ex) {
-
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(ex.getMessage());
+    public ProblemDetail handleIllegalState(IllegalStateException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Illegal State Conflict");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<String> handleIllegalArgument(
-            IllegalArgumentException ex) {
+    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Invalid Argument");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ex.getMessage());
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleGenericException(Exception ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected internal error occurred."
+        );
+        problem.setTitle("Internal Server Error");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "Operation violates database integrity constraints (e.g., product is referenced by existing orders). Deactivate the product instead."
+        );
+        problem.setTitle("Data Integrity Conflict");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
     }
 }

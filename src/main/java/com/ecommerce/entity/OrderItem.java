@@ -44,6 +44,14 @@ public class OrderItem {
         this.unitPrice = unitPrice;
     }
 
+    public String getProductName() {
+        return productName;
+    }
+
+    public void setProductName(String productName) {
+        this.productName = productName;
+    }
+
     public Product getProduct() {
         return product;
     }
@@ -65,6 +73,9 @@ public class OrderItem {
 
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal unitPrice;
+
+    @Column(name = "product_name", nullable = false)
+    private String productName;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)

@@ -1,15 +1,67 @@
 package com.ecommerce.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Entity
 @Table(name = "orders")
+@EntityListeners(AuditingEntityListener.class)
 public class Order {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotBlank
+    @Email
+    @Column(name = "customer_email")
+    private String customerEmail;
+
+    @NotBlank
+    @Column(name = "customer_name")
+    private String customerName;
+
+    @Column(name = "shipping_address")
+    private String shippingAddress;
+
+    @CreatedDate
+    @Column(name = "order_date", nullable = false, updatable = false)
+    private Instant orderDate;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrderStatus status = OrderStatus.PENDING;
+
+    @NotNull
+    @DecimalMin(value = "0.00")
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal totalAmount;
+
+    @Size(min = 1, message = "An order must contain at least one item")
+    @OneToMany(
+            mappedBy = "order",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private List<OrderItem> orderItems = new ArrayList<>();
+
+    @LastModifiedDate
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 
     public Order() {
     }
@@ -22,11 +74,35 @@ public class Order {
         this.id = id;
     }
 
-    public LocalDateTime getOrderDate() {
+    public String getCustomerEmail() {
+        return customerEmail;
+    }
+
+    public void setCustomerEmail(String customerEmail) {
+        this.customerEmail = customerEmail;
+    }
+
+    public String getCustomerName() {
+        return customerName;
+    }
+
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
+    }
+
+    public String getShippingAddress() {
+        return shippingAddress;
+    }
+
+    public void setShippingAddress(String shippingAddress) {
+        this.shippingAddress = shippingAddress;
+    }
+
+    public Instant getOrderDate() {
         return orderDate;
     }
 
-    public void setOrderDate(LocalDateTime orderDate) {
+    public void setOrderDate(Instant orderDate) {
         this.orderDate = orderDate;
     }
 
@@ -47,37 +123,28 @@ public class Order {
     }
 
     public List<OrderItem> getOrderItems() {
-        return orderItems;
+        return Collections.unmodifiableList(orderItems);
     }
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime orderDate;
-
-    @PrePersist
-    protected void onCreate() {
-        orderDate = LocalDateTime.now();
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private OrderStatus status = OrderStatus.PENDING;
-
-    @Column(nullable = false, precision = 12, scale = 2)
-    private BigDecimal totalAmount;
-
-    @OneToMany(
-            mappedBy = "order",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true
-    )
-    private List<OrderItem> orderItems = new ArrayList<>();
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
 
     public void addOrderItem(OrderItem item) {
+        if (item == null) {
+            throw new IllegalArgumentException("Order item cannot be null");
+        }
         orderItems.add(item);
         item.setOrder(this);
+    }
+
+    public void removeOrderItem(OrderItem item) {
+        if (orderItems.remove(item)) {
+            item.setOrder(null);
+        }
     }
 }

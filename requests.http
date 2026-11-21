@@ -1,85 +1,74 @@
-POST http://localhost:8080/products
+### 0. Health Check (Spring Boot Actuator)
+GET http://localhost:8080/actuator/health
 
-###
-GET http://localhost:8080/products
-
-###
-GET http://localhost:8080/products/2
-
-###
-GET http://localhost:8080/products/999
-
-###
-PUT http://localhost:8080/products/2
-Content-Type: application/json
-
-{
-  "name": "MacBook Air",
-  "description": "Apple laptop",
-  "price": 200000,
-  "active": true
-}
-
-###
-PUT http://localhost:8080/products/1
-Content-Type: application/json
-
-{
-  "name": "iPhone 17 Pro",
-  "description": "Apple premium smartphone",
-  "price": 99999,
-  "active": true
-}
-
-###
-PUT http://localhost:8080/products/999
-Content-Type: application/json
-
-{
-  "name": "",
-  "description": "",
-  "price": 0,
-  "active": true
-}
-
-###
-PUT http://localhost:8080/products/1
-Content-Type: application/json
-
-{
-  "name": "Test Product",
-  "description": "Testing missing product",
-  "price": 100,
-  "active": true
-}
-
-###
-DELETE http://localhost:8080/products/2
-
-###
-POST http://localhost:8080/products
+### 1. Create a Product (Returns 201 Created)
+POST http://localhost:8080/api/v1/products
 Content-Type: application/json
 
 {
   "name": "iPhone 17",
   "description": "Apple smartphone",
-  "price": 79999,
+  "price": 79999.00,
   "active": true,
   "stock": 10
 }
 
-### Purchase product
-POST http://localhost:8080/products/4/purchase
+### 2. Get All Products (Paginated)
+GET http://localhost:8080/api/v1/products?page=0&size=10
+
+### 3. Get Product by ID
+GET http://localhost:8080/api/v1/products/1
+
+### 4. Search and Filter Products (with pagination and sorting)
+GET http://localhost:8080/api/v1/products/search?search=iPhone&active=true&page=0&size=5&sortBy=price&direction=desc
+
+### 5. Update a Product (with inventory stock update and fractional price)
+PUT http://localhost:8080/api/v1/products/1
 Content-Type: application/json
 
 {
-  "quantity": 3
+  "name": "iPhone 17 Pro",
+  "description": "Apple premium smartphone",
+  "price": 99999.99,
+  "active": true,
+  "stock": 15
 }
 
-###
-POST http://localhost:8080/products/4/purchase
+### 6. Delete a Product
+DELETE http://localhost:8080/api/v1/products/1
+
+### 7. Purchase Product directly (legacy single purchase with @Retryable concurrency control)
+POST http://localhost:8080/api/v1/products/1/purchase
 Content-Type: application/json
 
 {
-  "quantity": 10
+  "quantity": 2
 }
+
+### 8. Create an Order (Returns 201 Created, with Customer identity & @Retryable)
+POST http://localhost:8080/api/v1/orders
+Content-Type: application/json
+
+{
+  "customerEmail": "alice@example.com",
+  "customerName": "Alice Johnson",
+  "shippingAddress": "456 Market St, San Francisco, CA",
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 2
+    }
+  ]
+}
+
+### 9. Get All Orders (Paginated)
+GET http://localhost:8080/api/v1/orders?page=0&size=10&direction=desc
+
+### 10. Get Order by ID
+GET http://localhost:8080/api/v1/orders/1
+
+### 11. Cancel a Pending Order
+PATCH http://localhost:8080/api/v1/orders/1/cancel
+
+### 12. Confirm a Pending Order
+PATCH http://localhost:8080/api/v1/orders/1/confirm

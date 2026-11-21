@@ -7,13 +7,16 @@ import com.ecommerce.entity.*;
 import com.ecommerce.exception.InsufficientStockException;
 import com.ecommerce.exception.OrderNotFoundException;
 import com.ecommerce.exception.ProductNotFoundException;
+import com.ecommerce.mapper.OrderMapper;
 import com.ecommerce.repository.OrderRepository;
 import com.ecommerce.repository.ProductRepository;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mapstruct.factory.Mappers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -32,6 +35,9 @@ public class OrderServiceTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Spy
+    private OrderMapper orderMapper = Mappers.getMapper(OrderMapper.class);
 
     @InjectMocks
     private OrderService orderService;
@@ -59,6 +65,9 @@ public class OrderServiceTest {
         // Assert
         assertNotNull(response);
         assertEquals(1L, response.getId());
+        assertEquals("customer@example.com", response.getCustomerEmail());
+        assertEquals("John Doe", response.getCustomerName());
+        assertEquals("123 Main St", response.getShippingAddress());
         assertEquals(OrderStatus.PENDING, response.getStatus());
         assertEquals(new BigDecimal("200.00"), response.getTotalAmount());
         assertEquals(1, response.getOrderItems().size());
@@ -115,11 +124,15 @@ public class OrderServiceTest {
         when(productRepository.findById(1L))
                 .thenReturn(Optional.of(product));
 
-        CreateOrderRequestDTO request = new CreateOrderRequestDTO();
-        request.setItems(List.of(
-                createOrderItemRequest(1L, 1),
-                createOrderItemRequest(1L, 2)
-        ));
+        CreateOrderRequestDTO request = new CreateOrderRequestDTO(
+                "customer@example.com",
+                "John Doe",
+                null,
+                List.of(
+                        createOrderItemRequest(1L, 1),
+                        createOrderItemRequest(1L, 2)
+                )
+        );
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -185,6 +198,9 @@ public class OrderServiceTest {
     void getOrderById_shouldReturnOrderWhenItExists() {
         Order order = new Order();
         order.setId(1L);
+        order.setCustomerEmail("customer@example.com");
+        order.setCustomerName("John Doe");
+        order.setShippingAddress("123 Main St");
         order.setStatus(OrderStatus.PENDING);
         order.setTotalAmount(new BigDecimal("200.00"));
 
@@ -195,6 +211,9 @@ public class OrderServiceTest {
 
         assertNotNull(response);
         assertEquals(1L, response.getId());
+        assertEquals("customer@example.com", response.getCustomerEmail());
+        assertEquals("John Doe", response.getCustomerName());
+        assertEquals("123 Main St", response.getShippingAddress());
         assertEquals(OrderStatus.PENDING, response.getStatus());
         assertEquals(new BigDecimal("200.00"), response.getTotalAmount());
 
@@ -220,6 +239,8 @@ public class OrderServiceTest {
 
         Order order = new Order();
         order.setId(1L);
+        order.setCustomerEmail("customer@example.com");
+        order.setCustomerName("John Doe");
         order.setStatus(OrderStatus.PENDING);
         order.setTotalAmount(new BigDecimal("200.00"));
 
@@ -330,24 +351,49 @@ public class OrderServiceTest {
         return product;
     }
 
+    @Test
+    void confirmOrder_shouldMarkPendingOrderAsConfirmed() {
+        Order order = new Order();
+        order.setId(1L);
+        order.setStatus(OrderStatus.PENDING);
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponseDTO response = orderService.confirmOrder(1L);
+
+        assertEquals(OrderStatus.CONFIRMED, response.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void confirmOrder_shouldRejectCancelledOrder() {
+        Order order = new Order();
+        order.setId(1L);
+        order.setStatus(OrderStatus.CANCELLED);
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(IllegalStateException.class, () -> orderService.confirmOrder(1L));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
     private CreateOrderRequestDTO createOrderRequest(
             Long productId,
             int quantity
     ) {
-        CreateOrderRequestDTO request = new CreateOrderRequestDTO();
-        request.setItems(List.of(
-                createOrderItemRequest(productId, quantity)
-        ));
-        return request;
+        return new CreateOrderRequestDTO(
+                "customer@example.com",
+                "John Doe",
+                "123 Main St",
+                List.of(createOrderItemRequest(productId, quantity))
+        );
     }
 
     private OrderItemRequestDTO createOrderItemRequest(
             Long productId,
             int quantity
     ) {
-        OrderItemRequestDTO item = new OrderItemRequestDTO();
-        item.setProductId(productId);
-        item.setQuantity(quantity);
-        return item;
+        return new OrderItemRequestDTO(productId, quantity);
     }
 }

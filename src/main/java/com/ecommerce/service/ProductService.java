@@ -6,63 +6,56 @@ import com.ecommerce.entity.Inventory;
 import com.ecommerce.entity.Product;
 import com.ecommerce.exception.InsufficientStockException;
 import com.ecommerce.exception.ProductNotFoundException;
+import com.ecommerce.mapper.ProductMapper;
 import com.ecommerce.repository.InventoryRepository;
 import com.ecommerce.repository.ProductRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 public class ProductService {
 
-
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
+    private final ProductMapper productMapper;
 
-    public ProductService(ProductRepository productRepository, InventoryRepository inventoryRepository) {
-
+    public ProductService(ProductRepository productRepository,
+                          InventoryRepository inventoryRepository,
+                          ProductMapper productMapper) {
         this.productRepository = productRepository;
         this.inventoryRepository = inventoryRepository;
+        this.productMapper = productMapper;
     }
 
     @Transactional
     public ProductResponseDTO createProduct(ProductRequestDTO dto) {
 
-        Product product = new Product();
-
-        product.setName(dto.getName());
-        product.setDescription(dto.getDescription());
-        product.setPrice(dto.getPrice());
-        product.setActive(dto.getActive());
-
-        Product savedProduct = productRepository.save(product);
+        Product product = productMapper.toProduct(dto);
 
         Inventory inventory = new Inventory();
-        inventory.setStock(dto.getStock());
-
+        inventory.setStock(dto.stock());
         Inventory savedInventory = inventoryRepository.save(inventory);
 
-        savedProduct.setInventory(savedInventory);
-        productRepository.save(savedProduct);
+        product.setInventory(savedInventory);
+        Product savedProduct = productRepository.save(product);
 
-        ProductResponseDTO response = new ProductResponseDTO();
-
-        response.setId(savedProduct.getId());
-        response.setName(savedProduct.getName());
-        response.setDescription(savedProduct.getDescription());
-        response.setPrice(savedProduct.getPrice());
-        response.setActive(savedProduct.getActive());
-        response.setStock(savedInventory.getStock());
-
-        return response;
+        return productMapper.toProductResponseDTO(savedProduct);
     }
 
+    @Retryable(
+            retryFor = ObjectOptimisticLockingFailureException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 100, multiplier = 2)
+    )
     @Transactional
     public void purchaseProduct(Long productId, int quantity) {
 
@@ -71,7 +64,14 @@ public class ProductService {
                         new ProductNotFoundException(
                                 "Product not found with id: " + productId));
 
+        if (!Boolean.TRUE.equals(product.getActive())) {
+            throw new IllegalArgumentException("Product is inactive: " + productId);
+        }
+
         Inventory inventory = product.getInventory();
+        if (inventory == null) {
+            throw new IllegalStateException("Inventory not found for product id: " + productId);
+        }
 
         if (inventory.getStock() < quantity) {
             throw new InsufficientStockException(
@@ -79,36 +79,24 @@ public class ProductService {
         }
 
         inventory.setStock(inventory.getStock() - quantity);
-
         inventoryRepository.save(inventory);
     }
 
+    @Transactional(readOnly = true)
+    public Page<ProductResponseDTO> getAllProducts(Pageable pageable) {
+        return productRepository.findAll(pageable)
+                .map(productMapper::toProductResponseDTO);
+    }
+
+    @Transactional(readOnly = true)
     public List<ProductResponseDTO> getAllProducts() {
-
-        List<Product> products = productRepository.findAll();
-
-        return products.stream()
-                .map(product -> {
-                    ProductResponseDTO response = new ProductResponseDTO();
-
-                    response.setId(product.getId());
-                    response.setName(product.getName());
-                    response.setDescription(product.getDescription());
-                    response.setPrice(product.getPrice());
-                    response.setActive(product.getActive());
-
-                    response.setStock(
-                            product.getInventory() != null
-                                    ? product.getInventory().getStock()
-                                    : null
-                    );
-
-                    return response;
-                })
+        return productRepository.findAll()
+                .stream()
+                .map(productMapper::toProductResponseDTO)
                 .toList();
     }
 
-
+    @Transactional(readOnly = true)
     public ProductResponseDTO getProductById(Long id) {
 
         Product product = productRepository.findById(id)
@@ -117,23 +105,10 @@ public class ProductService {
                                 "Product not found with id: " + id
                         ));
 
-        ProductResponseDTO response = new ProductResponseDTO();
-
-        response.setId(product.getId());
-        response.setName(product.getName());
-        response.setDescription(product.getDescription());
-        response.setPrice(product.getPrice());
-        response.setActive(product.getActive());
-
-        response.setStock(
-                product.getInventory() != null
-                        ? product.getInventory().getStock()
-                        : null
-        );
-
-        return response;
+        return productMapper.toProductResponseDTO(product);
     }
 
+    @Transactional
     public ProductResponseDTO updateProduct(Long id, ProductRequestDTO dto) {
 
         Product product = productRepository.findById(id)
@@ -142,30 +117,25 @@ public class ProductService {
                                 "Product not found with id: " + id
                         ));
 
-        product.setName(dto.getName());
-        product.setDescription(dto.getDescription());
-        product.setPrice(dto.getPrice());
-        product.setActive(dto.getActive());
+        product.setName(dto.name());
+        product.setDescription(dto.description());
+        product.setPrice(dto.price());
+        product.setActive(dto.active());
+
+        if (product.getInventory() != null) {
+            product.getInventory().setStock(dto.stock());
+        } else {
+            Inventory newInventory = new Inventory();
+            newInventory.setStock(dto.stock());
+            product.setInventory(inventoryRepository.save(newInventory));
+        }
 
         Product updatedProduct = productRepository.save(product);
 
-        ProductResponseDTO response = new ProductResponseDTO();
-
-        response.setId(updatedProduct.getId());
-        response.setName(updatedProduct.getName());
-        response.setDescription(updatedProduct.getDescription());
-        response.setPrice(updatedProduct.getPrice());
-        response.setActive(updatedProduct.getActive());
-
-        response.setStock(
-                updatedProduct.getInventory() != null
-                        ? updatedProduct.getInventory().getStock()
-                        : null
-        );
-
-        return response;
+        return productMapper.toProductResponseDTO(updatedProduct);
     }
 
+    @Transactional
     public void deleteProduct(Long id) {
 
         Product product = productRepository.findById(id)
@@ -222,24 +192,6 @@ public class ProductService {
                         active,
                         pageable
                 )
-                .map(this::toProductResponseDTO);
-    }
-
-    private ProductResponseDTO toProductResponseDTO(Product product) {
-        ProductResponseDTO response = new ProductResponseDTO();
-
-        response.setId(product.getId());
-        response.setName(product.getName());
-        response.setDescription(product.getDescription());
-        response.setPrice(product.getPrice());
-        response.setActive(product.getActive());
-
-        response.setStock(
-                product.getInventory() != null
-                        ? product.getInventory().getStock()
-                        : null
-        );
-
-        return response;
+                .map(productMapper::toProductResponseDTO);
     }
 }

@@ -10,7 +10,7 @@ A RESTful backend application built with Java and Spring Boot to manage products
 - **Purchase Processing** — Process product purchases with quantity validation and stock checks.
 - **Product Search** — Search by product name or description, filter by active status, and paginate and sort results.
 - **Data Validation** — Validate request payloads and reject invalid inputs.
-- **Exception Handling** — Return appropriate HTTP error responses for invalid requests, missing resources, and insufficient stock.
+- **RFC 7807 Exception Handling** — Return standard `ProblemDetail` HTTP error responses for invalid requests, missing resources, and insufficient stock.
 - **Transaction Management** — Maintain data consistency during operations involving multiple database changes.
 - **Concurrency Control** — Use optimistic locking to help prevent conflicting inventory updates.
 - **API Documentation** — Explore and test endpoints through Swagger UI and OpenAPI.
@@ -67,7 +67,7 @@ The application follows a layered architecture that separates HTTP handling, bus
 - **Services:** Implement business logic, validation, inventory operations, and order workflows.
 - **Repositories:** Provide database access through Spring Data JPA.
 - **Entities:** Represent products, inventory, orders, order items, and order statuses.
-- **Exception Handler:** Centralizes API error handling and maps common exceptions to appropriate HTTP status codes.
+- **Exception Handler:** Centralizes API error handling using RFC 7807 `ProblemDetail` specifications.
 
 ## Prerequisites
 
@@ -184,19 +184,19 @@ Swagger UI lets you inspect endpoint parameters, review request and response sch
 
 ## API Endpoints
 
-The following endpoints reflect the application's current controller mappings.
+All endpoints support the standardized versioned prefix `/api/v1/...` (legacy paths `/products` and `/api/orders` remain supported for backward compatibility).
 
 ### Products
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/products` | Retrieve all products |
-| POST | `/products` | Create a product |
-| GET | `/products/{id}` | Retrieve a product by ID |
-| PUT | `/products/{id}` | Update a product |
-| DELETE | `/products/{id}` | Delete a product |
-| GET | `/products/search` | Search, filter, sort, and paginate products |
-| POST | `/products/{id}/purchase` | Purchase a product |
+| Method | Endpoint | Status | Description |
+|---|---|---|---|
+| GET | `/api/v1/products` | `200 OK` | Retrieve all products |
+| POST | `/api/v1/products` | `201 Created` | Create a product and initialize stock |
+| GET | `/api/v1/products/{id}` | `200 OK` | Retrieve a product by ID |
+| PUT | `/api/v1/products/{id}` | `200 OK` | Update a product |
+| DELETE | `/api/v1/products/{id}` | `204 No Content` | Delete a product |
+| GET | `/api/v1/products/search` | `200 OK` | Search, filter, sort, and paginate products |
+| POST | `/api/v1/products/{id}/purchase` | `204 No Content` | Purchase a product |
 
 ### Product Search
 
@@ -214,19 +214,19 @@ The search endpoint supports these query parameters:
 Example:
 
 ```bash
-curl -i "http://localhost:8080/products/search?search=phone&active=true&page=0&size=5&sortBy=name&direction=asc"
+curl -i "http://localhost:8080/api/v1/products/search?search=phone&active=true&page=0&size=5&sortBy=name&direction=asc"
 ```
 
-Invalid search parameters, such as unsupported sort fields or page sizes outside the permitted range, return HTTP `400 Bad Request`.
+Invalid search parameters, such as unsupported sort fields or page sizes outside the permitted range, return HTTP `400 Bad Request` in RFC 7807 `ProblemDetail` format.
 
 ### Orders
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/orders` | Retrieve all orders |
-| POST | `/api/orders` | Create an order |
-| GET | `/api/orders/{orderId}` | Retrieve an order by ID |
-| PATCH | `/api/orders/{orderId}/cancel` | Cancel an order |
+| Method | Endpoint | Status | Description |
+|---|---|---|---|
+| GET | `/api/v1/orders` | `200 OK` | Retrieve all orders |
+| POST | `/api/v1/orders` | `201 Created` | Create and place an order |
+| GET | `/api/v1/orders/{orderId}` | `200 OK` | Retrieve an order by ID |
+| PATCH | `/api/v1/orders/{orderId}/cancel` | `200 OK` | Cancel a pending order |
 
 Use Swagger UI to inspect the required request bodies and response schemas for product creation, purchasing, and order creation.
 
@@ -251,13 +251,13 @@ The test suite covers service behavior, product search, order workflows, integra
 This project provides practical experience with:
 
 - Layered backend architecture and separation of concerns.
-- RESTful API design and HTTP status codes.
+- RESTful API design, versioned routing, and HTTP status codes.
 - DTO-based request and response handling.
 - Relational data modeling and ORM.
 - Database transactions and rollback behavior.
 - Inventory validation and stock consistency.
 - Optimistic locking for concurrent updates.
-- Centralized exception handling.
+- Centralized exception handling with RFC 7807 Problem Details.
 - Pagination, filtering, and sorting.
 - Unit testing and integration testing.
 - Docker-based application deployment.

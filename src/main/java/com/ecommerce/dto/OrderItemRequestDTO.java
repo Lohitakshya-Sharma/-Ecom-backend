@@ -1,33 +1,19 @@
 package com.ecommerce.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
-public class OrderItemRequestDTO {
+public record OrderItemRequestDTO(
+        @Schema(description = "ID of the product being purchased", example = "1")
+        @NotNull(message = "Product ID is required")
+        Long productId,
 
-    @NotNull
-    private Long productId;
-
-    @NotNull
-    @Positive
-    private Integer quantity;
-
-    public OrderItemRequestDTO() {
-    }
-
-    public Long getProductId() {
-        return productId;
-    }
-
-    public void setProductId(Long productId) {
-        this.productId = productId;
-    }
-
-    public Integer getQuantity() {
-        return quantity;
-    }
-
-    public void setQuantity(Integer quantity) {
-        this.quantity = quantity;
-    }
+        @Schema(description = "Quantity of the product to order", example = "2")
+        @NotNull(message = "Quantity is required")
+        @Positive(message = "Quantity must be greater than zero")
+        Integer quantity
+) {
+    public Long getProductId() { return productId(); }
+    public Integer getQuantity() { return quantity(); }
 }

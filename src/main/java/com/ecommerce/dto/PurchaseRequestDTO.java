@@ -1,19 +1,14 @@
 package com.ecommerce.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
-public class PurchaseRequestDTO {
-
-    @NotNull
-    @Min(1)
-    private Integer quantity;
-
-    public Integer getQuantity() {
-        return quantity;
-    }
-
-    public void setQuantity(Integer quantity) {
-        this.quantity = quantity;
-    }
+public record PurchaseRequestDTO(
+        @Schema(description = "Quantity of units to purchase", example = "2")
+        @NotNull(message = "Quantity is required")
+        @Min(value = 1, message = "Quantity must be at least 1")
+        Integer quantity
+) {
+    public Integer getQuantity() { return quantity(); }
 }

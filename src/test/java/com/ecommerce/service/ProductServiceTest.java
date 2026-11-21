@@ -5,13 +5,16 @@ import com.ecommerce.dto.ProductResponseDTO;
 import com.ecommerce.entity.Inventory;
 import com.ecommerce.entity.Product;
 import com.ecommerce.exception.ProductNotFoundException;
+import com.ecommerce.mapper.ProductMapper;
 import com.ecommerce.repository.InventoryRepository;
 import com.ecommerce.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -34,6 +37,9 @@ class ProductServiceTest {
     @Mock
     private InventoryRepository inventoryRepository;
 
+    @Spy
+    private ProductMapper productMapper = Mappers.getMapper(ProductMapper.class);
+
     @InjectMocks
     private ProductService productService;
 
@@ -41,7 +47,6 @@ class ProductServiceTest {
     void createProduct_shouldReturnProductResponse() {
 
         Product savedProduct = new Product();
-
         savedProduct.setId(1L);
         savedProduct.setName("iPhone 17");
         savedProduct.setDescription("Apple smartphone");
@@ -51,12 +56,13 @@ class ProductServiceTest {
         when(productRepository.save(any(Product.class)))
                 .thenReturn(savedProduct);
 
-        ProductRequestDTO dto = new ProductRequestDTO();
-
-        dto.setName("iPhone 17");
-        dto.setDescription("Apple smartphone");
-        dto.setPrice(new BigDecimal("79999"));
-        dto.setActive(true);
+        ProductRequestDTO dto = new ProductRequestDTO(
+                "iPhone 17",
+                "Apple smartphone",
+                new BigDecimal("79999"),
+                true,
+                10
+        );
 
         when(inventoryRepository.save(any(Inventory.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -69,7 +75,7 @@ class ProductServiceTest {
         assertEquals(new BigDecimal("79999"), response.getPrice());
         assertEquals(true, response.getActive());
 
-        verify(productRepository, times(2)).save(any(Product.class));
+        verify(productRepository, times(1)).save(any(Product.class));
     }
 
     @Test
@@ -92,34 +98,38 @@ class ProductServiceTest {
     @Test
     void updateProduct_shouldUpdateAndReturnProductResponse() {
 
-        Product existingProduct = new Product();
+        Inventory existingInventory = new Inventory();
+        existingInventory.setStock(10);
 
+        Product existingProduct = new Product();
         existingProduct.setId(1L);
         existingProduct.setName("iPhone 17");
         existingProduct.setDescription("Apple smartphone");
         existingProduct.setPrice(new BigDecimal("79999"));
         existingProduct.setActive(true);
+        existingProduct.setInventory(existingInventory);
 
         when(productRepository.findById(1L))
                 .thenReturn(Optional.of(existingProduct));
 
         Product updatedProduct = new Product();
-
         updatedProduct.setId(1L);
         updatedProduct.setName("iPhone 17 Pro");
         updatedProduct.setDescription("Updated Apple smartphone");
         updatedProduct.setPrice(new BigDecimal("99999"));
         updatedProduct.setActive(true);
+        updatedProduct.setInventory(existingInventory);
 
         when(productRepository.save(any(Product.class)))
                 .thenReturn(updatedProduct);
 
-        ProductRequestDTO dto = new ProductRequestDTO();
-
-        dto.setName("iPhone 17 Pro");
-        dto.setDescription("Updated Apple smartphone");
-        dto.setPrice(new BigDecimal("99999"));
-        dto.setActive(true);
+        ProductRequestDTO dto = new ProductRequestDTO(
+                "iPhone 17 Pro",
+                "Updated Apple smartphone",
+                new BigDecimal("99999"),
+                true,
+                15
+        );
 
         ProductResponseDTO response =
                 productService.updateProduct(1L, dto);
@@ -129,6 +139,8 @@ class ProductServiceTest {
         assertEquals("Updated Apple smartphone", response.getDescription());
         assertEquals(new BigDecimal("99999"), response.getPrice());
         assertEquals(true, response.getActive());
+        assertEquals(15, response.getStock());
+        assertEquals(15, existingInventory.getStock());
 
         verify(productRepository).findById(1L);
         verify(productRepository).save(any(Product.class));
