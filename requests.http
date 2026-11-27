@@ -22,7 +22,7 @@ GET http://localhost:8080/api/v1/products/1
 ### 4. Search and Filter Products (with pagination and sorting)
 GET http://localhost:8080/api/v1/products/search?search=iPhone&active=true&page=0&size=5&sortBy=price&direction=desc
 
-### 5. Update a Product (with inventory stock update and fractional price)
+### 5. Update a Product (name, description, price, active)
 PUT http://localhost:8080/api/v1/products/1
 Content-Type: application/json
 
@@ -30,8 +30,15 @@ Content-Type: application/json
   "name": "iPhone 17 Pro",
   "description": "Apple premium smartphone",
   "price": 99999.99,
-  "active": true,
-  "stock": 15
+  "active": true
+}
+
+### 5b. Adjust Product Stock (delta can be positive or negative)
+PATCH http://localhost:8080/api/v1/products/1/stock
+Content-Type: application/json
+
+{
+  "delta": 5
 }
 
 ### 6. Delete a Product

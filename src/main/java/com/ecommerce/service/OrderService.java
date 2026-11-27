@@ -9,12 +9,15 @@ import com.ecommerce.entity.OrderItem;
 import com.ecommerce.entity.OrderStatus;
 import com.ecommerce.entity.Product;
 import com.ecommerce.exception.InsufficientStockException;
+import com.ecommerce.exception.InvalidOrderStateException;
+import com.ecommerce.exception.InvalidRequestException;
 import com.ecommerce.exception.OrderNotFoundException;
 import com.ecommerce.exception.ProductNotFoundException;
 import com.ecommerce.mapper.OrderMapper;
 import com.ecommerce.repository.OrderRepository;
 import com.ecommerce.repository.ProductRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -25,7 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
@@ -44,8 +51,8 @@ public class OrderService {
 
     @Retryable(
             retryFor = ObjectOptimisticLockingFailureException.class,
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2)
+            maxAttempts = 5,
+            backoff = @Backoff(delay = 50, multiplier = 2, random = true)
     )
     @Transactional
     public OrderResponseDTO createOrder(CreateOrderRequestDTO request) {
@@ -63,9 +70,7 @@ public class OrderService {
             Long productId = itemRequest.productId();
 
             if (!productIds.add(productId)) {
-                throw new IllegalArgumentException(
-                        "Duplicate product ID: " + productId
-                );
+                throw new InvalidRequestException("Duplicate product ID: " + productId);
             }
 
             Product product = productRepository.findById(productId)
@@ -74,9 +79,7 @@ public class OrderService {
                     ));
 
             if (!Boolean.TRUE.equals(product.getActive())) {
-                throw new IllegalArgumentException(
-                        "Product is inactive: " + productId
-                );
+                throw new InvalidRequestException("Product is inactive: " + productId);
             }
 
             Inventory inventory = product.getInventory();
@@ -129,8 +132,23 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public Page<OrderResponseDTO> getAllOrders(Pageable pageable) {
-        return orderRepository.findAll(pageable)
-                .map(orderMapper::toOrderResponseDTO);
+        Page<Long> idPage = orderRepository.findOrderIds(pageable);
+        if (idPage.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        List<Long> ids = idPage.getContent();
+        Map<Long, Order> ordersById = orderRepository.findWithItemsByIdIn(ids)
+                .stream()
+                .collect(Collectors.toMap(Order::getId, Function.identity()));
+
+        List<OrderResponseDTO> content = ids.stream()
+                .map(ordersById::get)
+                .filter(Objects::nonNull)
+                .map(orderMapper::toOrderResponseDTO)
+                .toList();
+
+        return new PageImpl<>(content, pageable, idPage.getTotalElements());
     }
 
     @Transactional(readOnly = true)
@@ -149,7 +167,7 @@ public class OrderService {
                 ));
 
         if (order.getStatus() != OrderStatus.PENDING) {
-            throw new IllegalStateException(
+            throw new InvalidOrderStateException(
                     "Only pending orders can be confirmed"
             );
         }
@@ -167,7 +185,7 @@ public class OrderService {
                 ));
 
         if (order.getStatus() != OrderStatus.PENDING) {
-            throw new IllegalStateException(
+            throw new InvalidOrderStateException(
                     "Only pending orders can be cancelled"
             );
         }
@@ -186,8 +204,6 @@ public class OrderService {
                     inventory.getStock() + item.getQuantity()
             );
         }
-
-
 
         order.setStatus(OrderStatus.CANCELLED);
 

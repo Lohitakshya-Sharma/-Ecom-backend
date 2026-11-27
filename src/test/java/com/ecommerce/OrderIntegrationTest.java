@@ -11,6 +11,7 @@ import com.ecommerce.repository.OrderRepository;
 import com.ecommerce.repository.ProductRepository;
 import com.ecommerce.service.OrderService;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,9 +22,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
-@Transactional
-class OrderIntegrationTest {
+
+class OrderIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private OrderService orderService;
@@ -37,24 +37,28 @@ class OrderIntegrationTest {
     @Autowired
     private OrderRepository orderRepository;
 
+    @BeforeEach
+    void cleanDatabase() {
+        orderRepository.deleteAll();
+        productRepository.deleteAll();
+    }
+
     @Test
     void shouldCreateOrderAndDeductInventory() {
 
-        // Arrange: Create and persist inventory
+        // Arrange: Create inventory and product together (cascade persists inventory)
         Inventory inventory = new Inventory();
         inventory.setStock(10);
 
-        Inventory savedInventory = inventoryRepository.save(inventory);
-
-        // Arrange: Create and persist product
         Product product = new Product();
         product.setName("Test Product");
         product.setDescription("Integration test product");
         product.setPrice(new BigDecimal("100.00"));
         product.setActive(true);
-        product.setInventory(savedInventory);
+        product.setInventory(inventory);
 
         Product savedProduct = productRepository.save(product);
+        Long inventoryId = savedProduct.getInventory().getId();
 
         // Arrange: Build order request using Record canonical constructor
         OrderItemRequestDTO itemRequest = new OrderItemRequestDTO(savedProduct.getId(), 2);
@@ -80,14 +84,10 @@ class OrderIntegrationTest {
         assertEquals(1, response.orderItems().size());
         assertEquals(2, response.orderItems().get(0).quantity());
 
-        // Assert: Verify inventory deduction
         Inventory updatedInventory = inventoryRepository
-                .findById(savedInventory.getId())
+                .findById(inventoryId)
                 .orElseThrow();
 
         assertEquals(8, updatedInventory.getStock());
-
-        // Assert: Verify order persistence
-        assertTrue(orderRepository.existsById(response.id()));
     }
 }

@@ -2,8 +2,11 @@ package com.ecommerce.service;
 
 import com.ecommerce.dto.ProductRequestDTO;
 import com.ecommerce.dto.ProductResponseDTO;
+import com.ecommerce.dto.ProductUpdateRequestDTO;
 import com.ecommerce.entity.Inventory;
 import com.ecommerce.entity.Product;
+import com.ecommerce.exception.InsufficientStockException;
+import com.ecommerce.exception.InvalidRequestException;
 import com.ecommerce.exception.ProductNotFoundException;
 import com.ecommerce.mapper.ProductMapper;
 import com.ecommerce.repository.InventoryRepository;
@@ -96,7 +99,7 @@ class ProductServiceTest {
     }
 
     @Test
-    void updateProduct_shouldUpdateAndReturnProductResponse() {
+    void updateProduct_shouldUpdateFieldsOnlyWithoutChangingStock() {
 
         Inventory existingInventory = new Inventory();
         existingInventory.setStock(10);
@@ -112,23 +115,14 @@ class ProductServiceTest {
         when(productRepository.findById(1L))
                 .thenReturn(Optional.of(existingProduct));
 
-        Product updatedProduct = new Product();
-        updatedProduct.setId(1L);
-        updatedProduct.setName("iPhone 17 Pro");
-        updatedProduct.setDescription("Updated Apple smartphone");
-        updatedProduct.setPrice(new BigDecimal("99999"));
-        updatedProduct.setActive(true);
-        updatedProduct.setInventory(existingInventory);
-
         when(productRepository.save(any(Product.class)))
-                .thenReturn(updatedProduct);
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProductRequestDTO dto = new ProductRequestDTO(
+        ProductUpdateRequestDTO dto = new ProductUpdateRequestDTO(
                 "iPhone 17 Pro",
                 "Updated Apple smartphone",
                 new BigDecimal("99999"),
-                true,
-                15
+                false
         );
 
         ProductResponseDTO response =
@@ -138,12 +132,125 @@ class ProductServiceTest {
         assertEquals("iPhone 17 Pro", response.getName());
         assertEquals("Updated Apple smartphone", response.getDescription());
         assertEquals(new BigDecimal("99999"), response.getPrice());
-        assertEquals(true, response.getActive());
-        assertEquals(15, response.getStock());
-        assertEquals(15, existingInventory.getStock());
+        assertEquals(false, response.getActive());
+        assertEquals(10, response.getStock());
+        assertEquals(10, existingInventory.getStock());
 
         verify(productRepository).findById(1L);
-        verify(productRepository).save(any(Product.class));
+        verify(productRepository).save(existingProduct);
+        verifyNoInteractions(inventoryRepository);
+    }
+
+    @Test
+    void adjustStock_shouldIncreaseStockAndSaveInventory() {
+        Inventory existingInventory = new Inventory();
+        existingInventory.setStock(10);
+
+        Product existingProduct = createProduct(
+                1L,
+                "iPhone 17",
+                "Apple smartphone",
+                "79999",
+                true
+        );
+        existingProduct.setInventory(existingInventory);
+
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(existingProduct));
+        when(inventoryRepository.save(existingInventory))
+                .thenReturn(existingInventory);
+
+        ProductResponseDTO response = productService.adjustStock(1L, 5);
+
+        assertEquals(15, existingInventory.getStock());
+        assertEquals(15, response.getStock());
+        verify(inventoryRepository).save(existingInventory);
+    }
+
+    @Test
+    void adjustStock_shouldDecreaseStockToZeroAndSaveInventory() {
+        Inventory existingInventory = new Inventory();
+        existingInventory.setStock(10);
+
+        Product existingProduct = createProduct(
+                1L,
+                "iPhone 17",
+                "Apple smartphone",
+                "79999",
+                true
+        );
+        existingProduct.setInventory(existingInventory);
+
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(existingProduct));
+        when(inventoryRepository.save(existingInventory))
+                .thenReturn(existingInventory);
+
+        ProductResponseDTO response = productService.adjustStock(1L, -10);
+
+        assertEquals(0, existingInventory.getStock());
+        assertEquals(0, response.getStock());
+        verify(inventoryRepository).save(existingInventory);
+    }
+
+    @Test
+    void adjustStock_shouldThrowInsufficientStockWhenNewStockIsNegative() {
+        Inventory existingInventory = new Inventory();
+        existingInventory.setStock(5);
+
+        Product existingProduct = createProduct(
+                1L,
+                "iPhone 17",
+                "Apple smartphone",
+                "79999",
+                true
+        );
+        existingProduct.setInventory(existingInventory);
+
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(existingProduct));
+
+        assertThrows(
+                InsufficientStockException.class,
+                () -> productService.adjustStock(1L, -6)
+        );
+
+        assertEquals(5, existingInventory.getStock());
+        verify(inventoryRepository, never()).save(any());
+    }
+
+    @Test
+    void adjustStock_shouldThrowWhenProductDoesNotExist() {
+        when(productRepository.findById(999L))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                ProductNotFoundException.class,
+                () -> productService.adjustStock(999L, 5)
+        );
+
+        verifyNoInteractions(inventoryRepository);
+    }
+
+    @Test
+    void adjustStock_shouldThrowWhenInventoryIsMissing() {
+        Product existingProduct = createProduct(
+                1L,
+                "iPhone 17",
+                "Apple smartphone",
+                "79999",
+                true
+        );
+
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(existingProduct));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> productService.adjustStock(1L, 5)
+        );
+
+        verifyNoInteractions(inventoryRepository);
     }
 
     @Test
@@ -236,7 +343,7 @@ class ProductServiceTest {
     void searchProducts_shouldRejectNegativePage() {
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRequestException.class,
                 () -> productService.searchProducts(
                         null, null, -1, 10, "id", "asc"
                 )
@@ -249,7 +356,7 @@ class ProductServiceTest {
     void searchProducts_shouldRejectInvalidPageSize() {
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRequestException.class,
                 () -> productService.searchProducts(
                         null, null, 0, 101, "id", "asc"
                 )
@@ -262,7 +369,7 @@ class ProductServiceTest {
     void searchProducts_shouldRejectInvalidSortField() {
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRequestException.class,
                 () -> productService.searchProducts(
                         null, null, 0, 10, "description", "asc"
                 )
@@ -275,7 +382,7 @@ class ProductServiceTest {
     void searchProducts_shouldRejectInvalidSortDirection() {
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRequestException.class,
                 () -> productService.searchProducts(
                         null, null, 0, 10, "id", "sideways"
                 )

@@ -2,9 +2,11 @@ package com.ecommerce.service;
 
 import com.ecommerce.dto.ProductRequestDTO;
 import com.ecommerce.dto.ProductResponseDTO;
+import com.ecommerce.dto.ProductUpdateRequestDTO;
 import com.ecommerce.entity.Inventory;
 import com.ecommerce.entity.Product;
 import com.ecommerce.exception.InsufficientStockException;
+import com.ecommerce.exception.InvalidRequestException;
 import com.ecommerce.exception.ProductNotFoundException;
 import com.ecommerce.mapper.ProductMapper;
 import com.ecommerce.repository.InventoryRepository;
@@ -38,7 +40,6 @@ public class ProductService {
 
     @Transactional
     public ProductResponseDTO createProduct(ProductRequestDTO dto) {
-
         Product product = productMapper.toProduct(dto);
 
         Inventory inventory = new Inventory();
@@ -53,19 +54,18 @@ public class ProductService {
 
     @Retryable(
             retryFor = ObjectOptimisticLockingFailureException.class,
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2)
+            maxAttempts = 5,
+            backoff = @Backoff(delay = 50, multiplier = 2, random = true)
     )
     @Transactional
     public void purchaseProduct(Long productId, int quantity) {
-
         Product product = productRepository.findById(productId)
                 .orElseThrow(() ->
                         new ProductNotFoundException(
                                 "Product not found with id: " + productId));
 
         if (!Boolean.TRUE.equals(product.getActive())) {
-            throw new IllegalArgumentException("Product is inactive: " + productId);
+            throw new InvalidRequestException("Product is inactive: " + productId);
         }
 
         Inventory inventory = product.getInventory();
@@ -98,7 +98,6 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductResponseDTO getProductById(Long id) {
-
         Product product = productRepository.findById(id)
                 .orElseThrow(() ->
                         new ProductNotFoundException(
@@ -109,8 +108,7 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductResponseDTO updateProduct(Long id, ProductRequestDTO dto) {
-
+    public ProductResponseDTO updateProduct(Long id, ProductUpdateRequestDTO dto) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() ->
                         new ProductNotFoundException(
@@ -122,22 +120,43 @@ public class ProductService {
         product.setPrice(dto.price());
         product.setActive(dto.active());
 
-        if (product.getInventory() != null) {
-            product.getInventory().setStock(dto.stock());
-        } else {
-            Inventory newInventory = new Inventory();
-            newInventory.setStock(dto.stock());
-            product.setInventory(inventoryRepository.save(newInventory));
+        Product updatedProduct = productRepository.save(product);
+        return productMapper.toProductResponseDTO(updatedProduct);
+    }
+
+    @Retryable(
+            retryFor = ObjectOptimisticLockingFailureException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 50, multiplier = 2, random = true)
+    )
+    @Transactional
+    public ProductResponseDTO adjustStock(Long id, int delta) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() ->
+                        new ProductNotFoundException(
+                                "Product not found with id: " + id
+                        ));
+
+        Inventory inventory = product.getInventory();
+        if (inventory == null) {
+            throw new IllegalStateException("Inventory not found for product id: " + id);
         }
 
-        Product updatedProduct = productRepository.save(product);
+        int updatedStock = inventory.getStock() + delta;
+        if (updatedStock < 0) {
+            throw new InsufficientStockException(
+                    "Insufficient stock. Current stock: " + inventory.getStock()
+            );
+        }
 
-        return productMapper.toProductResponseDTO(updatedProduct);
+        inventory.setStock(updatedStock);
+        inventoryRepository.save(inventory);
+
+        return productMapper.toProductResponseDTO(product);
     }
 
     @Transactional
     public void deleteProduct(Long id) {
-
         Product product = productRepository.findById(id)
                 .orElseThrow(() ->
                         new ProductNotFoundException("Product not found with id: " + id));
@@ -155,25 +174,24 @@ public class ProductService {
             String direction
     ) {
         if (page < 0) {
-            throw new IllegalArgumentException("Page must be zero or greater");
+            throw new InvalidRequestException("Page must be zero or greater");
         }
 
         if (size < 1 || size > 100) {
-            throw new IllegalArgumentException("Page size must be between 1 and 100");
+            throw new InvalidRequestException("Page size must be between 1 and 100");
         }
 
         if (!List.of("id", "name", "price").contains(sortBy)) {
-            throw new IllegalArgumentException(
+            throw new InvalidRequestException(
                     "sortBy must be one of: id, name, price"
             );
         }
 
         Sort.Direction sortDirection;
-
         try {
             sortDirection = Sort.Direction.fromString(direction);
         } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException(
+            throw new InvalidRequestException(
                     "direction must be 'asc' or 'desc'"
             );
         }

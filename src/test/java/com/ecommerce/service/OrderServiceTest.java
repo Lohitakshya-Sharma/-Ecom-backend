@@ -4,9 +4,7 @@ import com.ecommerce.dto.CreateOrderRequestDTO;
 import com.ecommerce.dto.OrderItemRequestDTO;
 import com.ecommerce.dto.OrderResponseDTO;
 import com.ecommerce.entity.*;
-import com.ecommerce.exception.InsufficientStockException;
-import com.ecommerce.exception.OrderNotFoundException;
-import com.ecommerce.exception.ProductNotFoundException;
+import com.ecommerce.exception.*;
 import com.ecommerce.mapper.OrderMapper;
 import com.ecommerce.repository.OrderRepository;
 import com.ecommerce.repository.ProductRepository;
@@ -135,7 +133,7 @@ public class OrderServiceTest {
         );
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRequestException.class,
                 () -> orderService.createOrder(request)
         );
 
@@ -174,7 +172,7 @@ public class OrderServiceTest {
         CreateOrderRequestDTO request = createOrderRequest(1L, 2);
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRequestException.class,
                 () -> orderService.createOrder(request)
         );
 
@@ -284,7 +282,7 @@ public class OrderServiceTest {
                 .thenReturn(Optional.of(order));
 
         assertThrows(
-                IllegalStateException.class,
+                InvalidOrderStateException.class,
                 () -> orderService.cancelOrder(1L)
         );
 
@@ -325,7 +323,7 @@ public class OrderServiceTest {
                 .thenReturn(Optional.of(order));
 
         assertThrows(
-                IllegalStateException.class,
+                InvalidOrderStateException.class,
                 () -> orderService.cancelOrder(1L)
         );
 
@@ -374,7 +372,10 @@ public class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
-        assertThrows(IllegalStateException.class, () -> orderService.confirmOrder(1L));
+        assertThrows(
+                InvalidOrderStateException.class,
+                () -> orderService.confirmOrder(1L)
+        );
         verify(orderRepository, never()).save(any(Order.class));
     }
 

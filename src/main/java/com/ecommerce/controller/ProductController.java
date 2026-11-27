@@ -2,7 +2,9 @@ package com.ecommerce.controller;
 
 import com.ecommerce.dto.ProductRequestDTO;
 import com.ecommerce.dto.ProductResponseDTO;
+import com.ecommerce.dto.ProductUpdateRequestDTO;
 import com.ecommerce.dto.PurchaseRequestDTO;
+import com.ecommerce.dto.StockAdjustmentRequestDTO;
 import com.ecommerce.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -92,7 +94,7 @@ public class ProductController {
 
     @Operation(
             summary = "Update a product",
-            description = "Updates the details of an existing product and its inventory stock."
+            description = "Updates the name, description, price, and active status of an existing product."
     )
     @ApiResponses({
             @ApiResponse(
@@ -107,9 +109,32 @@ public class ProductController {
     public ProductResponseDTO updateProduct(
             @Parameter(description = "ID of the product to update", example = "1")
             @PathVariable Long id,
-            @Valid @RequestBody ProductRequestDTO dto) {
+            @Valid @RequestBody ProductUpdateRequestDTO dto) {
 
         return productService.updateProduct(id, dto);
+    }
+
+    @Operation(
+            summary = "Adjust product stock",
+            description = "Adjusts a product's inventory stock by a positive or negative delta."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Product stock adjusted successfully",
+                    content = @Content(schema = @Schema(implementation = ProductResponseDTO.class))
+            ),
+            @ApiResponse(responseCode = "400", description = "Invalid stock adjustment data"),
+            @ApiResponse(responseCode = "404", description = "Product not found"),
+            @ApiResponse(responseCode = "409", description = "Insufficient stock or concurrency conflict")
+    })
+    @PatchMapping("/{id}/stock")
+    public ProductResponseDTO adjustStock(
+            @Parameter(description = "ID of the product whose stock to adjust", example = "1")
+            @PathVariable Long id,
+            @Valid @RequestBody StockAdjustmentRequestDTO dto) {
+
+        return productService.adjustStock(id, dto.delta());
     }
 
     @Operation(

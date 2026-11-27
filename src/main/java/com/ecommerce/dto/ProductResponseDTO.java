@@ -1,7 +1,7 @@
 package com.ecommerce.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record ProductResponseDTO(
         Long id,
@@ -10,8 +10,8 @@ public record ProductResponseDTO(
         BigDecimal price,
         Boolean active,
         Integer stock,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
     public Long getId() { return id(); }
     public String getName() { return name(); }
@@ -19,6 +19,6 @@ public record ProductResponseDTO(
     public BigDecimal getPrice() { return price(); }
     public Boolean getActive() { return active(); }
     public Integer getStock() { return stock(); }
-    public LocalDateTime getCreatedAt() { return createdAt(); }
-    public LocalDateTime getUpdatedAt() { return updatedAt(); }
+    public Instant getCreatedAt() { return createdAt(); }
+    public Instant getUpdatedAt() { return updatedAt(); }
 }

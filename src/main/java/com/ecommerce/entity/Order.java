@@ -51,6 +51,8 @@ public class Order {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
+    @Version private Long version;
+
     @Size(min = 1, message = "An order must contain at least one item")
     @OneToMany(
             mappedBy = "order",
@@ -62,6 +64,14 @@ public class Order {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
 
     public Order() {
     }

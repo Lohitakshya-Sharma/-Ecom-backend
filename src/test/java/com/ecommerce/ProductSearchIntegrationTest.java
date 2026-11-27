@@ -2,24 +2,19 @@ package com.ecommerce;
 
 import com.ecommerce.dto.ProductResponseDTO;
 import com.ecommerce.entity.Product;
+import com.ecommerce.repository.OrderRepository;
 import com.ecommerce.repository.ProductRepository;
 import com.ecommerce.service.ProductService;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
-
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
-@Transactional
-class ProductSearchIntegrationTest {
+class ProductSearchIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private ProductService productService;
@@ -27,8 +22,12 @@ class ProductSearchIntegrationTest {
     @Autowired
     private ProductRepository productRepository;
 
+    @Autowired
+    private OrderRepository orderRepository;
+
     @BeforeEach
     void setUp() {
+        orderRepository.deleteAll();
         productRepository.deleteAll();
 
         productRepository.save(createProduct(

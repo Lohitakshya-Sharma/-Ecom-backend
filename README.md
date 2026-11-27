@@ -1,277 +1,130 @@
-# E-Commerce Inventory & Order Management System
+# E-Commerce Inventory & Order Management API
 
-A RESTful backend application built with Java and Spring Boot to manage products, inventory, and customer orders. The project focuses on backend engineering fundamentals, including layered architecture, database persistence, transaction management, input validation, concurrency control, and automated testing.
+![CI Build & Test](https://github.com/Lohitakshya-Sharma/-Ecom-backend/actions/workflows/ci.yml/badge.svg)
 
-## Features
-
-- **Product Management** — Create, retrieve, update, and delete products.
-- **Inventory Management** — Track product stock and manage inventory changes.
-- **Order Management** — Create orders, retrieve order details, list orders, and cancel orders.
-- **Purchase Processing** — Process product purchases with quantity validation and stock checks.
-- **Product Search** — Search by product name or description, filter by active status, and paginate and sort results.
-- **Data Validation** — Validate request payloads and reject invalid inputs.
-- **RFC 7807 Exception Handling** — Return standard `ProblemDetail` HTTP error responses for invalid requests, missing resources, and insufficient stock.
-- **Transaction Management** — Maintain data consistency during operations involving multiple database changes.
-- **Concurrency Control** — Use optimistic locking to help prevent conflicting inventory updates.
-- **API Documentation** — Explore and test endpoints through Swagger UI and OpenAPI.
-- **Automated Testing** — Unit and integration tests for core services, order workflows, product search, and inventory concurrency.
-- **Containerization** — Run the application and PostgreSQL using Docker Compose.
+A production-oriented Spring Boot REST API for managing product catalogs, concurrency-safe inventory, and multi-item order lifecycles backed by PostgreSQL, Flyway migrations, Testcontainers integration tests, and GitHub Actions CI.
 
 ## Tech Stack
 
-| Technology | Purpose |
-|---|---|
-| Java 17 | Programming language |
-| Spring Boot | Application framework |
-| Spring Web MVC | REST API development |
-| Spring Data JPA | Database access and persistence |
-| Hibernate | ORM |
-| PostgreSQL | Relational database |
-| Maven | Dependency management and build automation |
-| JUnit and Mockito | Automated testing |
-| H2 Database | In-memory database for tests |
-| Docker and Docker Compose | Containerization and service orchestration |
-| springdoc-openapi | API documentation |
+* **Language & Framework:** Java 17, Spring Boot 4.1.1 (Spring Web MVC, Spring Data JPA, Spring Validation, Spring Actuator, Spring Retry)
+* **Database & Migrations:** PostgreSQL 17, Flyway (`V1`–`V3` versioned SQL migrations)
+* **Mapping & API Docs:** MapStruct 1.6.3, Springdoc OpenAPI / Swagger UI
+* **Testing:** JUnit 5, Mockito, MockMvc, Testcontainers (`postgres:17-alpine`)
+* **DevOps & CI:** Docker, Multi-stage Dockerfile, Docker Compose with healthchecks, GitHub Actions
 
-## Architecture
+## Key Engineering Highlights
 
-The application follows a layered architecture that separates HTTP handling, business logic, persistence, and database storage.
+* **Zero-Oversell Concurrency Control:** Uses JPA `@Version` optimistic locking on both `Inventory` and `Order` entities combined with jittered `@Retryable` backoff (`maxAttempts = 5`) and PostgreSQL `CHECK (stock >= 0)` constraints.
+* **Separated Metadata & Stock Updates:** `PUT /api/v1/products/{id}` updates catalog metadata only, while `PATCH /api/v1/products/{id}/stock` applies atomic delta adjustments—preventing stale admin forms from overwriting concurrent sales.
+* **Order State Race Protection:** Optimistic locking on `Order` prevents concurrent `confirm` and `cancel` requests from corrupting state or double-restoring inventory.
+* **SQL-Level Pagination:** `GET /api/v1/orders` paginates order IDs in SQL first before batch-fetching items via `@EntityGraph`, avoiding Hibernate in-memory collection pagination.
+* **RFC 7807 Error Responses:** Centralized `@RestControllerAdvice` returns structured `ProblemDetail` payloads (`400`, `404`, `405`, `409`, `500`) with SLF4J server-side error logging.
+
+## Architecture & Database Schema
 
 ```text
-                  Client
-                    |
-                    | HTTP / JSON
-                    v
-             REST Controllers
-                    |
-                    v
-              Service Layer
-          (Business Logic and
-           Transaction Handling)
-                    |
-                    v
-             Repository Layer
-             (Spring Data JPA)
-                    |
-                    v
-                Hibernate
-                    |
-                    v
-               PostgreSQL
+src/main/java/com/ecommerce
+├── config        # OpenAPI / Swagger configuration
+├── controller    # Versioned REST controllers (/api/v1/products, /api/v1/orders)
+├── dto           # Java record request/response DTOs with Bean Validation
+├── entity        # JPA entities (Product, Inventory, Order, OrderItem, OrderStatus)
+├── exception     # Domain exceptions & RFC 7807 GlobalExceptionHandler
+├── mapper        # MapStruct DTO <-> Entity mappers
+├── repository    # Spring Data JPA repositories & custom JPQL search/pagination queries
+└── service       # Transactional business logic & optimistic-lock retry boundaries
 ```
 
-### Main Components
+### Flyway Migrations (`src/main/resources/db/migration`)
 
-- **Controllers:** Handle HTTP requests and return API responses.
-- **DTOs:** Define the request and response structures exposed by the API.
-- **Services:** Implement business logic, validation, inventory operations, and order workflows.
-- **Repositories:** Provide database access through Spring Data JPA.
-- **Entities:** Represent products, inventory, orders, order items, and order statuses.
-- **Exception Handler:** Centralizes API error handling using RFC 7807 `ProblemDetail` specifications.
-
-## Prerequisites
-
-For local development, install:
-
-- Java 17
-- Maven, or use the included Maven Wrapper
-- PostgreSQL
-- Git
-
-For containerized execution, install Docker Desktop with Docker Compose.
+1. **`V1__init.sql`:** Core tables (`product`, `inventory`, `orders`, `order_items`), foreign keys, and inventory `@Version`.
+2. **`V2__snapshot_order_product_name_and_timezone.sql`:** Snapshots `product_name` at purchase time and migrates order timestamps to `TIMESTAMP WITH TIME ZONE`.
+3. **`V3__hardening_constraints_and_timestamps.sql`:** Adds `@Version` to `orders`, enforces `CHECK (stock >= 0)` and `CHECK (quantity > 0)`, and standardizes product timestamps to UTC `TIMESTAMP WITH TIME ZONE`.
 
 ## Getting Started
 
-### 1. Clone the repository
+### Prerequisites
+
+* Java 17+
+* Docker Desktop (for Docker Compose and Testcontainers)
+
+### 1. Clone the Repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/Lohitakshya-Sharma/-Ecom-backend.git
 cd ecommerce
 ```
 
-Replace the placeholder with your actual repository URL.
+### 2. Configure Environment Variables
 
-### 2. Configure the environment
-
-Create a local `.env` file in the project root, or configure the database password in your shell environment.
-
-Use `.env.example` as a reference:
-
-```dotenv
-DB_PASSWORD=replace_with_your_local_database_password
-```
-
-Set `DB_PASSWORD` to the password for your local PostgreSQL instance. Keep your actual `.env` file private and never commit credentials.
-
-The application uses the following PostgreSQL connection settings by default:
-
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/ecommerce
-spring.datasource.username=postgres
-spring.datasource.password=${DB_PASSWORD}
-```
-
-Ensure that PostgreSQL is running and that the `ecommerce` database exists before starting the application locally.
-
-### 3. Run the application
-
-On macOS or Linux:
+Copy `.env.example` to `.env` and set your PostgreSQL password:
 
 ```bash
-./mvnw spring-boot:run
+cp .env.example .env
 ```
 
-The application starts on:
-
-```text
-http://localhost:8080
+```env
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
 ```
 
-## Running with Docker Compose
+### 3. Run with Docker Compose (Recommended)
 
-Docker Compose runs the application alongside PostgreSQL.
-
-### 1. Configure the database password
-
-Create a `.env` file in the project root:
-
-```dotenv
-DB_PASSWORD=replace_with_your_local_database_password
-```
-
-Use a password suitable for your local development environment. Do not commit this file.
-
-### 2. Build and start the services
+Starts PostgreSQL 17 and the Spring Boot application with container healthchecks:
 
 ```bash
-docker compose up --build -d
+docker compose up --build
 ```
 
-### 3. Check service status
+* **API Base URL:** `http://localhost:8080/api/v1`
+* **Swagger UI:** `http://localhost:8080/swagger-ui.html`
+* **Health Check:** `http://localhost:8080/actuator/health`
+
+### 4. Run Locally with Maven
+
+Start only the PostgreSQL container (`localhost:5433`) and run Spring Boot locally:
 
 ```bash
-docker compose ps
+docker compose up -d db
+DB_PASSWORD=postgres ./mvnw spring-boot:run
 ```
-
-### 4. Inspect application logs
-
-```bash
-docker compose logs --tail=100 app
-```
-
-### 5. Stop the services
-
-```bash
-docker compose down
-```
-
-To remove the PostgreSQL volume and its stored database data as well, use:
-
-```bash
-docker compose down -v
-```
-
-**Warning:** The `-v` option deletes the database volume and its persisted data. Use it only when you intend to reset the local database.
-
-## API Documentation
-
-Once the application is running, access the interactive API documentation:
-
-- **Swagger UI:** `http://localhost:8080/swagger-ui/index.html`
-- **OpenAPI JSON:** `http://localhost:8080/v3/api-docs`
-
-Swagger UI lets you inspect endpoint parameters, review request and response schemas, and execute API calls directly from your browser.
 
 ## API Endpoints
 
-All endpoints support the standardized versioned prefix `/api/v1/...` (legacy paths `/products` and `/api/orders` remain supported for backward compatibility).
+### Products (`/api/v1/products`)
 
-### Products
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/products` | Create a new product with initial inventory stock (`201 Created`) |
+| `GET` | `/api/v1/products` | List products with pagination (`page`, `size`) |
+| `GET` | `/api/v1/products/{id}` | Retrieve a product by ID |
+| `PUT` | `/api/v1/products/{id}` | Update product metadata (`name`, `description`, `price`, `active`) |
+| `PATCH` | `/api/v1/products/{id}/stock` | Adjust inventory stock by a positive or negative `delta` |
+| `DELETE` | `/api/v1/products/{id}` | Delete a product (`204 No Content`) |
+| `POST` | `/api/v1/products/{id}/purchase` | Purchase a specific quantity directly |
+| `GET` | `/api/v1/products/search` | Search by keyword, filter by `active`, sort (`id`, `name`, `price`), and paginate |
 
-| Method | Endpoint | Status | Description |
-|---|---|---|---|
-| GET | `/api/v1/products` | `200 OK` | Retrieve all products |
-| POST | `/api/v1/products` | `201 Created` | Create a product and initialize stock |
-| GET | `/api/v1/products/{id}` | `200 OK` | Retrieve a product by ID |
-| PUT | `/api/v1/products/{id}` | `200 OK` | Update a product |
-| DELETE | `/api/v1/products/{id}` | `204 No Content` | Delete a product |
-| GET | `/api/v1/products/search` | `200 OK` | Search, filter, sort, and paginate products |
-| POST | `/api/v1/products/{id}/purchase` | `204 No Content` | Purchase a product |
+### Orders (`/api/v1/orders`)
 
-### Product Search
-
-The search endpoint supports these query parameters:
-
-| Parameter | Purpose | Default |
-|---|---|---|
-| `search` | Search product names and descriptions | No search filter |
-| `active` | Filter by active status | No status filter |
-| `page` | Zero-based page number | `0` |
-| `size` | Number of results per page | `10` |
-| `sortBy` | Sort field: `id`, `name`, or `price` | `id` |
-| `direction` | Sort direction: `asc` or `desc` | `asc` |
-
-Example:
-
-```bash
-curl -i "http://localhost:8080/api/v1/products/search?search=phone&active=true&page=0&size=5&sortBy=name&direction=asc"
-```
-
-Invalid search parameters, such as unsupported sort fields or page sizes outside the permitted range, return HTTP `400 Bad Request` in RFC 7807 `ProblemDetail` format.
-
-### Orders
-
-| Method | Endpoint | Status | Description |
-|---|---|---|---|
-| GET | `/api/v1/orders` | `200 OK` | Retrieve all orders |
-| POST | `/api/v1/orders` | `201 Created` | Create and place an order |
-| GET | `/api/v1/orders/{orderId}` | `200 OK` | Retrieve an order by ID |
-| PATCH | `/api/v1/orders/{orderId}/cancel` | `200 OK` | Cancel a pending order |
-
-Use Swagger UI to inspect the required request bodies and response schemas for product creation, purchasing, and order creation.
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/orders` | Create a multi-item order (`PENDING`) and deduct stock atomically (`201 Created`) |
+| `GET` | `/api/v1/orders` | List all orders with pagination |
+| `GET` | `/api/v1/orders/{orderId}` | Retrieve order details and line-item snapshots by ID |
+| `PATCH` | `/api/v1/orders/{orderId}/confirm` | Confirm a `PENDING` order (`PENDING → CONFIRMED`) |
+| `PATCH` | `/api/v1/orders/{orderId}/cancel` | Cancel a `PENDING` order (`PENDING → CANCELLED`) and restore stock |
 
 ## Testing
 
-Run the automated test suite:
+Ensure Docker Desktop is running, then execute the full test suite:
 
 ```bash
-./mvnw clean test
+./mvnw test
 ```
 
-Create a packaged application JAR:
+* **42 Automated Tests:** Covers service unit tests, MockMvc controller validation tests, Flyway `V1`–`V3` schema validation against Testcontainers PostgreSQL 17, and multi-threaded `ExecutorService` concurrency tests proving zero overselling.
+* **Continuous Integration:** Every push and pull request to `main` automatically runs `./mvnw clean verify` and verifies `docker build` via `.github/workflows/ci.yml`.
 
-```bash
-./mvnw clean package
-```
+## Planned Upgrades
 
-The test suite covers service behavior, product search, order workflows, integration scenarios, and inventory concurrency.
-
-## Engineering Concepts Demonstrated
-
-This project provides practical experience with:
-
-- Layered backend architecture and separation of concerns.
-- RESTful API design, versioned routing, and HTTP status codes.
-- DTO-based request and response handling.
-- Relational data modeling and ORM.
-- Database transactions and rollback behavior.
-- Inventory validation and stock consistency.
-- Optimistic locking for concurrent updates.
-- Centralized exception handling with RFC 7807 Problem Details.
-- Pagination, filtering, and sorting.
-- Unit testing and integration testing.
-- Docker-based application deployment.
-
-## Future Improvements
-
-Potential extensions include:
-
-- Authentication and role-based authorization.
-- Database migration management with Flyway or Liquibase.
-- CI workflows for automated testing.
-- More extensive API contract and concurrency testing.
-- Production-oriented monitoring and structured logging.
-
-## License
-
-No license has been specified yet. Add a license before distributing or reusing this project under an open-source license.
+* **Idempotent Order Creation:** Support an `Idempotency-Key` header on `POST /api/v1/orders` so client retries return the cached `201 Created` order without duplicate stock deductions.
+* **JWT Authentication & Role-Based Authorization (RBAC):** Add stateless Spring Security JWT authentication separating `ADMIN` catalog/order management from `CUSTOMER` order creation and resource ownership.
