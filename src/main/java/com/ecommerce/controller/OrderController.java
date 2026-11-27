@@ -2,6 +2,7 @@ package com.ecommerce.controller;
 
 import com.ecommerce.dto.CreateOrderRequestDTO;
 import com.ecommerce.dto.OrderResponseDTO;
+import com.ecommerce.service.OrderIdempotencyService;
 import com.ecommerce.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,14 +29,17 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderIdempotencyService orderIdempotencyService;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(OrderService orderService,
+                           OrderIdempotencyService orderIdempotencyService) {
         this.orderService = orderService;
+        this.orderIdempotencyService = orderIdempotencyService;
     }
 
     @Operation(
             summary = "Create a new order",
-            description = "Validates items, checks stock availability, deducts inventory, and places an order in PENDING status."
+            description = "Validates items, checks stock availability, deducts inventory, and places an order in PENDING status. Supports an optional Idempotency-Key header for safe retries."
     )
     @ApiResponses({
             @ApiResponse(
@@ -43,15 +47,18 @@ public class OrderController {
                     description = "Order created successfully",
                     content = @Content(schema = @Schema(implementation = OrderResponseDTO.class))
             ),
-            @ApiResponse(responseCode = "400", description = "Invalid request payload or inactive product"),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload, inactive product, or invalid Idempotency-Key"),
             @ApiResponse(responseCode = "404", description = "One or more products not found"),
-            @ApiResponse(responseCode = "409", description = "Insufficient inventory stock or concurrent update conflict")
+            @ApiResponse(responseCode = "409", description = "Insufficient inventory stock, idempotency key payload conflict, or concurrent update conflict")
     })
     @PostMapping
     public ResponseEntity<OrderResponseDTO> createOrder(
-            @RequestBody @Valid CreateOrderRequestDTO request) {
-        OrderResponseDTO created = orderService.createOrder(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+            @Parameter(description = "Optional client-generated idempotency key (max 128 characters) to safely retry order creation", example = "order-req-12345")
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody CreateOrderRequestDTO request
+    ) {
+        OrderResponseDTO response = orderIdempotencyService.createOrder(idempotencyKey, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @Operation(

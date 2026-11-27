@@ -3,11 +3,7 @@ package com.ecommerce.service;
 import com.ecommerce.dto.CreateOrderRequestDTO;
 import com.ecommerce.dto.OrderItemRequestDTO;
 import com.ecommerce.dto.OrderResponseDTO;
-import com.ecommerce.entity.Inventory;
-import com.ecommerce.entity.Order;
-import com.ecommerce.entity.OrderItem;
-import com.ecommerce.entity.OrderStatus;
-import com.ecommerce.entity.Product;
+import com.ecommerce.entity.*;
 import com.ecommerce.exception.InsufficientStockException;
 import com.ecommerce.exception.InvalidOrderStateException;
 import com.ecommerce.exception.InvalidRequestException;
@@ -24,6 +20,7 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.ecommerce.repository.IdempotencyRecordRepository;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -40,13 +37,16 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final OrderMapper orderMapper;
+    private final IdempotencyRecordRepository idempotencyRecordRepository;
 
     public OrderService(OrderRepository orderRepository,
                         ProductRepository productRepository,
-                        OrderMapper orderMapper) {
+                        OrderMapper orderMapper,
+                        IdempotencyRecordRepository idempotencyRecordRepository) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderMapper = orderMapper;
+        this.idempotencyRecordRepository = idempotencyRecordRepository;
     }
 
     @Retryable(
@@ -175,6 +175,24 @@ public class OrderService {
         order.setStatus(OrderStatus.CONFIRMED);
         Order savedOrder = orderRepository.save(order);
         return orderMapper.toOrderResponseDTO(savedOrder);
+    }
+
+    @Retryable(
+            retryFor = ObjectOptimisticLockingFailureException.class,
+            maxAttempts = 5,
+            backoff = @Backoff(delay = 50, multiplier = 2, random = true)
+    )
+    @Transactional
+    public OrderResponseDTO createOrderWithIdempotency(
+            String idempotencyKey,
+            String requestHash,
+            CreateOrderRequestDTO request
+    ) {
+        OrderResponseDTO response = createOrder(request);
+        idempotencyRecordRepository.saveAndFlush(
+                new IdempotencyRecord(idempotencyKey, requestHash, response.id())
+        );
+        return response;
     }
 
     @Transactional

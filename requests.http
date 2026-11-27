@@ -22,7 +22,7 @@ GET http://localhost:8080/api/v1/products/1
 ### 4. Search and Filter Products (with pagination and sorting)
 GET http://localhost:8080/api/v1/products/search?search=iPhone&active=true&page=0&size=5&sortBy=price&direction=desc
 
-### 5. Update a Product (name, description, price, active)
+### 5. Update a Product Metadata Only (name, description, price, active)
 PUT http://localhost:8080/api/v1/products/1
 Content-Type: application/json
 
@@ -41,10 +41,7 @@ Content-Type: application/json
   "delta": 5
 }
 
-### 6. Delete a Product
-DELETE http://localhost:8080/api/v1/products/1
-
-### 7. Purchase Product directly (legacy single purchase with @Retryable concurrency control)
+### 6. Purchase Product directly (legacy single purchase with @Retryable concurrency control)
 POST http://localhost:8080/api/v1/products/1/purchase
 Content-Type: application/json
 
@@ -52,9 +49,10 @@ Content-Type: application/json
   "quantity": 2
 }
 
-### 8. Create an Order (Returns 201 Created, with Customer identity & @Retryable)
+### 7a. Create an Order with Idempotency-Key (Returns 201 Created, deducts stock)
 POST http://localhost:8080/api/v1/orders
 Content-Type: application/json
+Idempotency-Key: order-req-001
 
 {
   "customerEmail": "alice@example.com",
@@ -68,14 +66,68 @@ Content-Type: application/json
   ]
 }
 
+### 7b. Retry Same Order with Same Idempotency-Key (Returns 201 Created, same Order ID, NO double stock deduction)
+POST http://localhost:8080/api/v1/orders
+Content-Type: application/json
+Idempotency-Key: order-req-001
+
+{
+  "customerEmail": "alice@example.com",
+  "customerName": "Alice Johnson",
+  "shippingAddress": "456 Market St, San Francisco, CA",
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 2
+    }
+  ]
+}
+
+### 7c. Reuse Same Idempotency-Key with Different Payload (Returns 409 Conflict)
+POST http://localhost:8080/api/v1/orders
+Content-Type: application/json
+Idempotency-Key: order-req-001
+
+{
+  "customerEmail": "alice@example.com",
+  "customerName": "Alice Johnson",
+  "shippingAddress": "456 Market St, San Francisco, CA",
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 5
+    }
+  ]
+}
+
+### 8. Create a Second Order (for testing Confirm vs. Cancel separately)
+POST http://localhost:8080/api/v1/orders
+Content-Type: application/json
+Idempotency-Key: order-req-002
+
+{
+  "customerEmail": "bob@example.com",
+  "customerName": "Bob Smith",
+  "shippingAddress": "789 Broadway, New York, NY",
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 1
+    }
+  ]
+}
+
 ### 9. Get All Orders (Paginated)
 GET http://localhost:8080/api/v1/orders?page=0&size=10&direction=desc
 
 ### 10. Get Order by ID
 GET http://localhost:8080/api/v1/orders/1
 
-### 11. Cancel a Pending Order
+### 11. Cancel Pending Order 1 (Restores stock)
 PATCH http://localhost:8080/api/v1/orders/1/cancel
 
-### 12. Confirm a Pending Order
-PATCH http://localhost:8080/api/v1/orders/1/confirm
+### 12. Confirm Pending Order 2 (Transitions PENDING -> CONFIRMED)
+PATCH http://localhost:8080/api/v1/orders/2/confirm
+
+### 13. Delete a Product (Run last; fails with 409/500 if referenced by existing order_items)
+DELETE http://localhost:8080/api/v1/products/1

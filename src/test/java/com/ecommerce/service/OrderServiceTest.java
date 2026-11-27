@@ -6,6 +6,7 @@ import com.ecommerce.dto.OrderResponseDTO;
 import com.ecommerce.entity.*;
 import com.ecommerce.exception.*;
 import com.ecommerce.mapper.OrderMapper;
+import com.ecommerce.repository.IdempotencyRecordRepository;
 import com.ecommerce.repository.OrderRepository;
 import com.ecommerce.repository.ProductRepository;
 
@@ -39,6 +40,9 @@ public class OrderServiceTest {
 
     @InjectMocks
     private OrderService orderService;
+
+    @Mock
+    private IdempotencyRecordRepository idempotencyRecordRepository;
 
     @Test
     void createOrder_shouldCreateOrderAndDeductStock() {
